@@ -1,141 +1,145 @@
-import json
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
-from typing import List
 import os
-from csv import writer
-from tqdm import tqdm
-"""
-import game_lag
-gl=game_lag(0) # 0 to work using the webcam
-               # 1 to work using the video
-
-g1.get_data(name) # file will be stored 
-"""
+import sys
+from scipy.signal import savgol_filter
+from scipy.signal import butter, lfilter
+from scipy.signal import hilbert, chirp
 
 
 class game_lag:
 
+    guass_kernel=(5,5)
     screenx1y1=(504,0)
     screenx2y2=(1812,760)
-    __relu=lambda x: np.maximum(0,x)
-    frame_rate=239
-    time_lag=[]
-
-
-    def __init__(self,type_opr:int,path=None) -> None:
-        print("Class initialized")
-        self.path=path
-        if type_opr==0 or (path!=None and os.path.isfile(path)) :
-            self.__process(type_opr)
-        else:
-            if type_opr!=1 or type_opr!=0:
-                raise "Invalid operation given."
-            else:
-                raise "File not found!!!"
+    rectanglex1y1=(680,850)
+    max_lag=500
     
-    def __process(self,type_opr:int):
-        print("Start Processing")
-        camera=cv2.VideoCapture(self.path) if type_opr==1 else cv2.VideoCapture(1)
-        frame1,frame2=None,None
+    rectanglex2y2=(1610,1050)
+    order=5
+    fs=60
+    cutoff=3.667
+
+
+    def __init__(self,video_path,frame_rate):
+        print("Initializing...")
+        if not os.path.exists(video_path):
+            print("Video file does not exist!")
+            sys.exit()
+        self.video_path = video_path
+        self.frame_rate = frame_rate
+        self.y,self.x,self.inputgiven=self.get_frame()
+        self.y_t=self.process()
+        #------------------------------------
+        plt.plot(self.x,self.y_t)
+        plt.plot(self.x,self.inputgiven)
+        plt.show()
+        #------------------------------------
+        coor_mat=[]
+        for i in range(self.max_lag):
+            input_given_shifted=self.shift(self.inputgiven,i)
+            coor_mat.append((i,self.coorelation(self.y_t,input_given_shifted)))
+        max_coor=max(coor_mat,key=lambda x:x[1])
+        print("Lag is: ",max_coor[0]/self.frame_rate," seconds")
+        
+    def get_frame(self):
         y=[]
-        x=[]
-        input_list=[]
-        try:
-            print("extracting frame...")
-            ret,frame2=camera.read()
-            for i in tqdm(range(10000)):
-                print(i,end="\r")
-                if not ret:
-                    break
-                input_list.append(True) if game_lag.__input_given(frame2) else input_list.append(False)
-                if  frame1 is not None:
-                    screen1=frame1[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
-                    screen2=frame2[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
-                    distance=np.sum(np.abs(screen1-screen2))
-                    y.append(distance)
-                else:
-                    frame1=frame2
-            print("frame extracted")
-            x=list(range(len(y)))
-            y=np.array(y)/max(y)
-            print("Applying filter and smoothing")
-            yhat=savgol_filter(y,51,3)
-            new_y_hat=yhat-np.mean(yhat)
-            new_y_hat=new_y_hat[50:2333]
-            new_y_hat=game_lag.__smooth(game_lag.__relu(game_lag.__relu(new_y_hat)-np.mean(game_lag.__relu(new_y_hat))),0.95)#Smoothing using exponential moving average
-            x=x[50:2333]
-            print("Filter and smoothing applied")
-            self.save_to_json(x,new_y_hat)
+        input_given=[]
+        print("Getting frames...")
+        cap = cv2.VideoCapture(self.video_path)
+        frame_count =  int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        print("Total frames: ",frame_count)
+        frame1=None
+        for i in range(frame_count):
+            print("Frame: ",i)
+            ret,frame2=cap.read()
+            if self.input_Given(frame2):
+                input_given.append(1)
+            else:
+                input_given.append(0)
+            if i==0:
+                frame1=frame2
+                continue
+            frame1gray=cv2.cvtColor(frame1,cv2.COLOR_BGR2GRAY)
+            frame2gray=cv2.cvtColor(frame2,cv2.COLOR_BGR2GRAY)
+            frame1guass=cv2.GaussianBlur(frame1gray,self.guass_kernel,0)
+            frame2guass=cv2.GaussianBlur(frame2gray,self.guass_kernel,0)
+            screen1=frame1guass[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
+            screen2=frame2guass[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
+            distance=np.sum(np.abs(screen1-screen2))
+            y.append(distance)
+            frame1=frame2
+        x=np.arange(len(y))
+        y=np.array(y)
+        y=y/np.max(y)
+        return y,x,input_given
+    
+    def process(self):
+        print("Processing...")
+        y=self.y
+        x=self.x
+        y=savgol_filter(y, 51, 3)
+        #------------------------------------
+        plt.plot(x,y)
+        plt.show()
+        #------------------------------------
+        b, a = self.butter_lowpass(self.cutoff, self.fs, self.order)
+        y_l = self.butter_lowpass_filter(y, self.cutoff, self.fs, self.order)
+        #------------------------------------
+        plt.plot(x,y_l)
+        plt.show()
+        #------------------------------------
+        analytic_signal = hilbert(y_l)
+        amplitude_envelope = np.abs(analytic_signal)
+        #------------------------------------
+        plt.plot(x,amplitude_envelope)
+        plt.show()
+        #------------------------------------
+        threshold=amplitude_envelope.mean()
+        y_t=np.zero(len(amplitude_envelope))
+        for i in range(len(amplitude_envelope)):
+            if amplitude_envelope[i]>threshold:
+                y_t[i]=1
+        #------------------------------------
+        plt.plot(x,y_t)
+        plt.show()
+        #------------------------------------
+        return y_t
 
-            for i in range(len(new_y_hat)):
-                if new_y_hat[i]>0 and input_list[i] == True:
-                    j=i
-                    try:
-                        while input_list[j]:
-                            j-=1
-                    except:
-                        j=0
-                    sel f.time_lag.append(abs(i-j)*self.frame_rate)
-                    if self.time_lag>240:
-                        continue
-                    List=[j,i,self.time_lag]
-                    with open('action.csv','a') as f:
-                        writer_obj=writer(f)
-                        writer_obj.writerow(List)
-                        f.close()
-            print("done with all data...")
-            average=sum(self.time_lag)/len(self.time_lag)
-            print(f"Average latency in this: {average}")
 
-        except Exception as e:
-            print("Oops Something went wrong :(")
-            print(e)
-
-    def __smooth(scalars: List[float], weight: float) -> List[float]:  # Weight between 0 and 1
-        last = scalars[0]  # First value in the plot (first timestep)
-        smoothed = list()
-        for point in scalars:
-            smoothed_val = last * weight + (1 - weight) * point  # Calculate smoothed value
-            smoothed.append(smoothed_val)                        # Save it
-            last = smoothed_val                                  # Anchor the last smoothed value
-            
-        return smoothed
-
-
-    def save_to_json(self,x:list,y:np.array)-> None:
-        with open('y.json','w') as f:
-            json.dump(y,f)
-        with open('x.json','w') as f:
-            json.dump(x,f)
-        print("Data saved")
-
-    def __input_given(frame):
-        frame=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-        try:
-            x_box=cv2.imread("x_box.jpg")
-            w, h = x_box.shape[::-1]
-            res = cv2.matchTemplate(frame,x_box,cv2.TM_CCOEFF_NORMED)
-            threshold=0.8
-            loc=np.where(res>=threshold)
-            pt=loc[::-1]
-            x_box=frame[pt[0]:pt[0]+w,pt[1]:pt[1]+h]
-        except:
-            rectanglex1y1=(680,850)
-            rectanglex2y2=(1610,1050)
-            x_box=frame[rectanglex1y1[1]:rectanglex2y2[1],rectanglex1y1[0]:rectanglex2y2[0]]
-
-        if np.any(x_box[:,:,2]>200):
+    def butter_lowpass(self,cutoff,fs,order=5):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff / nyq
+        b, a = butter(order, normal_cutoff, btype='low', analog=False)
+        return b, a
+    
+    def butter_lowpass_filter(self,data, cutoff, fs, order=5):
+        b, a = self.butter_lowpass(cutoff, fs, order=order)
+        y = lfilter(b, a, data)
+        return y
+    
+    def input_Given(self,y):
+        y=cv2.cvtColor(y,cv2.COLOR_BGR2RGB)
+        if np.any(y[:,:,2]>200):
             return True
         return False
-
+    
+    def coorelation(y1,y2):
+        res=y1*y2
+        return np.sum(res)
+    
+    def shift(self,x,n):
+        if n==0:
+            return x
+        l=[0]*n
+        l.extend(x[:-n])
+        return l
 
 if __name__=="__main__":
-    g=game_lag(1,"videos\Crouch.MP4")
+    video_path="videos\Crouch.MP4"
+    frame_rate=240
+    game_lag(video_path,frame_rate)
 
-print("\a")
 
-
-
+            
