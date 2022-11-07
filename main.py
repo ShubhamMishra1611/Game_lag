@@ -51,9 +51,14 @@ class game_lag:
         frame_count =  int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print("Total frames: ",frame_count)
         frame1=None
-        for i in range(frame_count):
+        for i in range(1200):
             print("Frame: ",i)
             ret,frame2=cap.read()
+            if ret==False:
+                print("---------------------------------------------------")
+                print("Error reading frame!")
+                print("---------------------------------------------------")
+                continue
             if self.input_Given(frame2):
                 input_given.append(1)
             else:
@@ -97,7 +102,7 @@ class game_lag:
         plt.show()
         #------------------------------------
         threshold=amplitude_envelope.mean()
-        y_t=np.zero(len(amplitude_envelope))
+        y_t=np.zeros(len(amplitude_envelope))
         for i in range(len(amplitude_envelope)):
             if amplitude_envelope[i]>threshold:
                 y_t[i]=1
@@ -125,7 +130,8 @@ class game_lag:
             return True
         return False
     
-    def coorelation(y1,y2):
+    def coorelation(self,y1,y2):
+        y1=np.delete(y1,-1)
         res=y1*y2
         return np.sum(res)
     
@@ -135,6 +141,7 @@ class game_lag:
         l=[0]*n
         l.extend(x[:-n])
         return l
+
 
 if __name__=="__main__":
     video_path="videos\Crouch.MP4"
