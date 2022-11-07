@@ -5,7 +5,7 @@ import os
 import sys
 from scipy.signal import savgol_filter
 from scipy.signal import butter, lfilter
-from scipy.signal import hilbert, chirp
+from scipy.signal import hilbert
 
 
 class game_lag:
@@ -30,10 +30,12 @@ class game_lag:
         self.video_path = video_path
         self.frame_rate = frame_rate
         self.y,self.x,self.inputgiven=self.get_frame()
+        self.inputgiven.pop()
         self.y_t=self.process()
         #------------------------------------
         plt.plot(self.x,self.y_t)
         plt.plot(self.x,self.inputgiven)
+        plt.title("Input given")
         plt.show()
         #------------------------------------
         coor_mat=[]
@@ -51,8 +53,7 @@ class game_lag:
         frame_count =  int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print("Total frames: ",frame_count)
         frame1=None
-        for i in range(1200):
-            print("Frame: ",i)
+        for i in range(frame_count):
             ret,frame2=cap.read()
             if ret==False:
                 print("---------------------------------------------------")
@@ -87,18 +88,21 @@ class game_lag:
         y=savgol_filter(y, 51, 3)
         #------------------------------------
         plt.plot(x,y)
+        plt.title("Savgol filter")
         plt.show()
         #------------------------------------
         b, a = self.butter_lowpass(self.cutoff, self.fs, self.order)
         y_l = self.butter_lowpass_filter(y, self.cutoff, self.fs, self.order)
         #------------------------------------
         plt.plot(x,y_l)
+        plt.title("Butterworth filter")
         plt.show()
         #------------------------------------
         analytic_signal = hilbert(y_l)
         amplitude_envelope = np.abs(analytic_signal)
         #------------------------------------
         plt.plot(x,amplitude_envelope)
+        plt.title("Amplitude envelope")
         plt.show()
         #------------------------------------
         threshold=amplitude_envelope.mean()
@@ -108,6 +112,7 @@ class game_lag:
                 y_t[i]=1
         #------------------------------------
         plt.plot(x,y_t)
+        plt.title("Thresholding")
         plt.show()
         #------------------------------------
         return y_t
@@ -125,13 +130,13 @@ class game_lag:
         return y
     
     def input_Given(self,y):
+        y=y[self.rectanglex1y1[1]:self.rectanglex2y2[1],self.rectanglex1y1[0]:self.rectanglex2y2[0]]
         y=cv2.cvtColor(y,cv2.COLOR_BGR2RGB)
         if np.any(y[:,:,2]>200):
             return True
         return False
     
     def coorelation(self,y1,y2):
-        y1=np.delete(y1,-1)
         res=y1*y2
         return np.sum(res)
     
