@@ -58,17 +58,10 @@ class game_lag:
                 print("Latency: ",max_latency[0]/self.frame_rate,"ms")
                 self.latency.append(max_latency)
                 with open("output.csv","a") as f:
-                    f.write(str(i)+","+str(max_latency)+"\n")
+                    f.write(str(i)+","+str(max_latency[0]/self.frame_rate)+"\n")
                 i+=length
             i+=1
         print("Average latency: ",np.mean(self.latency),"ms")
-
-        # coor_mat=[]
-        # for i in range(self.max_lag):
-        #     input_given_shifted=self.shift(self.inputgiven,i)
-        #     coor_mat.append((i,self.coorelation(self.y_t,input_given_shifted)))
-        # max_coor=max(coor_mat,key=lambda x:x[1])
-        # print("Lag is: ",max_coor[0]/self.frame_rate," seconds")
         
     def get_frame(self):
         y=[]
