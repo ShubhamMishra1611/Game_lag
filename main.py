@@ -14,12 +14,13 @@ class game_lag:
     screenx1y1=(504,0)
     screenx2y2=(1812,760)
     rectanglex1y1=(680,850)
-    max_lag=500
+    MAXLAG=500
     
     rectanglex2y2=(1610,1050)
     order=5
     fs=60
     cutoff=3.667
+    latency=[]
 
 
     def __init__(self,video_path,frame_rate):
@@ -38,12 +39,36 @@ class game_lag:
         plt.title("Input given")
         plt.show()
         #------------------------------------
-        coor_mat=[]
-        for i in range(self.max_lag):
-            input_given_shifted=self.shift(self.inputgiven,i)
-            coor_mat.append((i,self.coorelation(self.y_t,input_given_shifted)))
-        max_coor=max(coor_mat,key=lambda x:x[1])
-        print("Lag is: ",max_coor[0]/self.frame_rate," seconds")
+        i=0
+        while i<len(self.inputgiven):
+            if self.inputgiven[i]==1:
+                #get length till it is 1
+                length=0
+                for j in range(i,len(self.inputgiven)):
+                    if self.inputgiven[j]==1:
+                        length+=1
+                    else:
+                        break
+                lag=[]
+                for k in range(self.MAXLAG):
+                    input_shifted=self.shift(self.inputgiven[i:i+self.MAXLAG],k)
+                    lag.append((k,self.coorelation(self.y_t[i:i+self.MAXLAG],input_shifted)))
+                max_latency=max(lag,key=lambda item:item[1])
+                print("Action performed at frame: ",i)
+                print("Latency: ",max_latency[0]/self.frame_rate,"ms")
+                self.latency.append(max_latency)
+                with open("output.csv","a") as f:
+                    f.write(str(i)+","+str(max_latency)+"\n")
+                i+=length
+            i+=1
+        print("Average latency: ",np.mean(self.latency),"ms")
+
+        # coor_mat=[]
+        # for i in range(self.max_lag):
+        #     input_given_shifted=self.shift(self.inputgiven,i)
+        #     coor_mat.append((i,self.coorelation(self.y_t,input_given_shifted)))
+        # max_coor=max(coor_mat,key=lambda x:x[1])
+        # print("Lag is: ",max_coor[0]/self.frame_rate," seconds")
         
     def get_frame(self):
         y=[]
@@ -137,6 +162,13 @@ class game_lag:
         return False
     
     def coorelation(self,y1,y2):
+        if len(y1)!=len(y2):
+            if len(y1)<len(y2):
+                while len(y1)!=len(y2):
+                    y2=y2[:-1]
+            else:
+                while len(y1)!=len(y2):
+                    y1=y1[:-1]
         res=y1*y2
         return np.sum(res)
     
@@ -149,7 +181,7 @@ class game_lag:
 
 
 if __name__=="__main__":
-    video_path="videos\Crouch.MP4"
+    video_path="videos\Walk back.MP4"
     frame_rate=240
     game_lag(video_path,frame_rate)
 
