@@ -10,70 +10,72 @@ from scipy.signal import hilbert
 
 class game_lag:
 
-    guass_kernel=(5,5)
-    screenx1y1=(504,0)
-    screenx2y2=(1812,760)
-    rectanglex1y1=(680,850)
-    MAXLAG=500
-    
-    rectanglex2y2=(1610,1050)
-    order=5
-    fs=60
-    cutoff=3.667
-    latency=[]
+    guass_kernel = (5, 5)
+    screenx1y1 = (504, 0)
+    screenx2y2 = (1812, 760)
+    rectanglex1y1 = (680, 850)
+    rectanglex2y2 = (1610, 1050)
+    MAXLAG = 500
 
+    order = 5
+    fs = 60
+    cutoff = 3.667
+    latency = []
 
-    def __init__(self,video_path,frame_rate):
+    def __init__(self, video_path: str, frame_rate: int) -> None:
         print("Initializing...")
         if not os.path.exists(video_path):
             print("Video file does not exist!")
             sys.exit()
         self.video_path = video_path
         self.frame_rate = frame_rate
-        self.y,self.x,self.inputgiven=self.get_frame()
+        self.y, self.x, self.inputgiven = self.get_frame()
         self.inputgiven.pop()
-        self.y_t=self.process()
-        #------------------------------------
-        plt.plot(self.x,self.y_t)
-        plt.plot(self.x,self.inputgiven)
+        self.y_t = self.process()
+        # ------------------------------------
+        plt.plot(self.x, self.y_t)
+        plt.plot(self.x, self.inputgiven)
         plt.title("Input given")
         plt.show()
-        #------------------------------------
-        i=0
-        while i<len(self.inputgiven):
-            if self.inputgiven[i]==1:
-                #get length till it is 1
-                length=0
-                for j in range(i,len(self.inputgiven)):
-                    if self.inputgiven[j]==1:
-                        length+=1
+        # ------------------------------------
+        i = 0
+        while i < len(self.inputgiven):
+            if self.inputgiven[i] == 1:
+                # get length till it is 1
+                length = 0
+                for j in range(i, len(self.inputgiven)):
+                    if self.inputgiven[j] == 1:
+                        length += 1
                     else:
                         break
-                lag=[]
+                lag = []
                 for k in range(self.MAXLAG):
-                    input_shifted=self.shift(self.inputgiven[i:i+self.MAXLAG],k)
-                    lag.append((k,self.coorelation(self.y_t[i:i+self.MAXLAG],input_shifted)))
-                max_latency=max(lag,key=lambda item:item[1])
-                print("Action performed at frame: ",i)
-                print("Latency: ",max_latency[0]/self.frame_rate,"ms")
+                    input_shifted = self.shift(
+                        self.inputgiven[i:i+self.MAXLAG], k)
+                    lag.append((k, self.coorelation(
+                        self.y_t[i:i+self.MAXLAG], input_shifted)))
+                max_latency = max(lag, key=lambda item: item[1])
+                print("Action performed at frame: ", i)
+                print("Latency: ", max_latency[0]/self.frame_rate, "s")
                 self.latency.append(max_latency)
-                with open("output.csv","a") as f:
-                    f.write(str(i)+","+str(max_latency[0]/self.frame_rate)+"\n")
-                i+=length
-            i+=1
-        print("Average latency: ",np.mean(self.latency),"ms")
-        
+                with open("output_ADS_HG.csv", "a") as f:
+                    f.write(
+                        str(i)+","+str(max_latency[0]/self.frame_rate)+"\n")
+                i += length
+            i += 1
+        print("Average latency: ", np.mean(self.latency), "ms")
+
     def get_frame(self):
-        y=[]
-        input_given=[]
+        y = []
+        input_given = []
         print("Getting frames...")
         cap = cv2.VideoCapture(self.video_path)
-        frame_count =  int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print("Total frames: ",frame_count)
-        frame1=None
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        print("Total frames: ", frame_count)
+        frame1 = None
         for i in range(frame_count):
-            ret,frame2=cap.read()
-            if ret==False:
+            ret, frame2 = cap.read()
+            if ret == False:
                 print("---------------------------------------------------")
                 print("Error reading frame!")
                 print("---------------------------------------------------")
@@ -82,101 +84,100 @@ class game_lag:
                 input_given.append(1)
             else:
                 input_given.append(0)
-            if i==0:
-                frame1=frame2
+            if i == 0:
+                frame1 = frame2
                 continue
-            frame1gray=cv2.cvtColor(frame1,cv2.COLOR_BGR2GRAY)
-            frame2gray=cv2.cvtColor(frame2,cv2.COLOR_BGR2GRAY)
-            frame1guass=cv2.GaussianBlur(frame1gray,self.guass_kernel,0)
-            frame2guass=cv2.GaussianBlur(frame2gray,self.guass_kernel,0)
-            screen1=frame1guass[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
-            screen2=frame2guass[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
-            distance=np.sum(np.abs(screen1-screen2))
+            frame1gray = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+            frame2gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+            frame1guass = cv2.GaussianBlur(frame1gray, self.guass_kernel, 0)
+            frame2guass = cv2.GaussianBlur(frame2gray, self.guass_kernel, 0)
+            screen1 = frame1guass[self.screenx1y1[1]:self.screenx2y2[1],
+                                  self.screenx1y1[0]:self.screenx2y2[0]]
+            screen2 = frame2guass[self.screenx1y1[1]:self.screenx2y2[1],
+                                  self.screenx1y1[0]:self.screenx2y2[0]]
+            distance = np.sum(np.abs(screen1-screen2))
             y.append(distance)
-            frame1=frame2
-        x=np.arange(len(y))
-        y=np.array(y)
-        y=y/np.max(y)
-        return y,x,input_given
-    
+            frame1 = frame2
+        x = np.arange(len(y))
+        y = np.array(y)
+        y = y/np.max(y)
+        return y, x, input_given
+
     def process(self):
         print("Processing...")
-        y=self.y
-        x=self.x
-        y=savgol_filter(y, 51, 3)
-        #------------------------------------
-        plt.plot(x,y)
+        y = self.y
+        x = self.x
+        y = savgol_filter(y, 51, 3)
+        # ------------------------------------
+        plt.plot(x, y)
         plt.title("Savgol filter")
         plt.show()
-        #------------------------------------
+        # ------------------------------------
         b, a = self.butter_lowpass(self.cutoff, self.fs, self.order)
         y_l = self.butter_lowpass_filter(y, self.cutoff, self.fs, self.order)
-        #------------------------------------
-        plt.plot(x,y_l)
+        # ------------------------------------
+        plt.plot(x, y_l)
         plt.title("Butterworth filter")
         plt.show()
-        #------------------------------------
+        # ------------------------------------
         analytic_signal = hilbert(y_l)
         amplitude_envelope = np.abs(analytic_signal)
-        #------------------------------------
-        plt.plot(x,amplitude_envelope)
+        # ------------------------------------
+        plt.plot(x, amplitude_envelope)
         plt.title("Amplitude envelope")
         plt.show()
-        #------------------------------------
-        threshold=amplitude_envelope.mean()
-        y_t=np.zeros(len(amplitude_envelope))
+        # ------------------------------------
+        threshold = amplitude_envelope.mean()
+        y_t = np.zeros(len(amplitude_envelope))
         for i in range(len(amplitude_envelope)):
-            if amplitude_envelope[i]>threshold:
-                y_t[i]=1
-        #------------------------------------
-        plt.plot(x,y_t)
+            if amplitude_envelope[i] > threshold:
+                y_t[i] = 1
+        # ------------------------------------
+        plt.plot(x, y_t)
         plt.title("Thresholding")
         plt.show()
-        #------------------------------------
+        # ------------------------------------
         return y_t
 
-
-    def butter_lowpass(self,cutoff,fs,order=5):
+    def butter_lowpass(self, cutoff: float, fs: float, order: int = 5):
         nyq = 0.5 * fs
         normal_cutoff = cutoff / nyq
         b, a = butter(order, normal_cutoff, btype='low', analog=False)
         return b, a
-    
-    def butter_lowpass_filter(self,data, cutoff, fs, order=5):
+
+    def butter_lowpass_filter(self, data, cutoff, fs, order=5):
         b, a = self.butter_lowpass(cutoff, fs, order=order)
         y = lfilter(b, a, data)
         return y
-    
-    def input_Given(self,y):
-        y=y[self.rectanglex1y1[1]:self.rectanglex2y2[1],self.rectanglex1y1[0]:self.rectanglex2y2[0]]
-        y=cv2.cvtColor(y,cv2.COLOR_BGR2RGB)
-        if np.any(y[:,:,2]>200):
+
+    def input_Given(self, y):
+        y = y[self.rectanglex1y1[1]:self.rectanglex2y2[1],
+              self.rectanglex1y1[0]:self.rectanglex2y2[0]]
+        y = cv2.cvtColor(y, cv2.COLOR_BGR2RGB)
+        if np.any(y[:, :, 2] > 200):
             return True
         return False
-    
-    def coorelation(self,y1,y2):
-        if len(y1)!=len(y2):
-            if len(y1)<len(y2):
-                while len(y1)!=len(y2):
-                    y2=y2[:-1]
+
+    def coorelation(self, y1, y2):
+        if len(y1) != len(y2):
+            if len(y1) < len(y2):
+                while len(y1) != len(y2):
+                    y2 = y2[:-1]
             else:
-                while len(y1)!=len(y2):
-                    y1=y1[:-1]
-        res=y1*y2
+                while len(y1) != len(y2):
+                    y1 = y1[:-1]
+        res = y1*y2
         return np.sum(res)
-    
-    def shift(self,x,n):
-        if n==0:
+
+    def shift(self, x: np.array, n: int):
+        if n == 0:
             return x
-        l=[0]*n
+        l = [0]*n
         l.extend(x[:-n])
         return l
 
 
-if __name__=="__main__":
-    video_path="videos\Walk back.MP4"
-    frame_rate=240
-    game_lag(video_path,frame_rate)
-
-
-            
+if __name__ == "__main__":
+    video_path = "videos\ADS HG.MP4"  # Path to video
+    frame_rate = 240  # Frame rate of video
+    game_lag(video_path, frame_rate)  # Create object of game_lag class
