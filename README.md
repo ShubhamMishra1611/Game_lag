@@ -1,4 +1,7 @@
 # Game_lag
+
+# Results
+## Results are uploaded in [test_final.ipynb](https://github.com/ShubhamMishra1611/Game_lag/blob/main/test_final.ipynb) on the data provided from same site.
 ## Requirements
 
 * Python 3.6
@@ -6,14 +9,6 @@
 * Numpy
 * Matplotlib
 * Scipy
-
-## Installation
-
-* Install Python 3.6
-* Install OpenCV
-* Install Numpy
-* Install Matplotlib
-* Install Scipy
 
 ## Usage
 
