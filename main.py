@@ -22,8 +22,17 @@ class game_lag:
     cutoff = 3.667
     latency = []
 
-    def __init__(self, video_path: str, frame_rate: int) -> None:
+    def __init__(self, video_path: str, frame_rate: int,visual:bool = False) -> None:
+        '''
+        video_path: path to the video file
+        frame_rate: frame rate of the video
+        visual: if True, plots will be shown.Default value is False
+
+        For Example:
+        game_lag("video.mp4",60,visual=True)
+        '''
         print("Initializing...")
+        self.visual=visual
         if not os.path.exists(video_path):
             print("Video file does not exist!")
             sys.exit()
@@ -33,15 +42,15 @@ class game_lag:
         self.inputgiven.pop()
         self.y_t = self.process()
         # ------------------------------------
-        plt.plot(self.x, self.y_t)
-        plt.plot(self.x, self.inputgiven)
-        plt.title("Input given")
-        plt.show()
+        if self.visual:
+            plt.plot(self.x, self.y_t)
+            plt.plot(self.x, self.inputgiven)
+            plt.title("Input given")
+            plt.show()
         # ------------------------------------
         i = 0
         while i < len(self.inputgiven):
             if self.inputgiven[i] == 1:
-                # get length till it is 1
                 length = 0
                 for j in range(i, len(self.inputgiven)):
                     if self.inputgiven[j] == 1:
@@ -55,15 +64,14 @@ class game_lag:
                     lag.append((k, self.coorelation(
                         self.y_t[i:i+self.MAXLAG], input_shifted)))
                 max_latency = max(lag, key=lambda item: item[1])
-                print("Action performed at frame: ", i)
-                print("Latency: ", max_latency[0]/self.frame_rate, "s")
+                print("Action performed at frame: ", i,end=" ")
+                print("Latency: ", max_latency[0]/self.frame_rate, "s",end="\n")
                 self.latency.append(max_latency)
                 with open("output_ADS_HG.csv", "a") as f:
-                    f.write(
-                        str(i)+","+str(max_latency[0]/self.frame_rate)+"\n")
+                    f.write(str(i)+","+str(i+max_latency[0])+","+str(max_latency[0]/self.frame_rate)+"\n")
                 i += length
             i += 1
-        print("Average latency: ", np.mean(self.latency), "ms")
+        print("Done!")
 
     def get_frame(self):
         y = []
@@ -73,31 +81,31 @@ class game_lag:
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print("Total frames: ", frame_count)
         frame1 = None
+        screen1=None
+        screen2=None
         for i in range(frame_count):
             ret, frame2 = cap.read()
+            print("Frame: ", i,end="\r")
             if ret == False:
                 print("---------------------------------------------------")
                 print("Error reading frame!")
                 print("---------------------------------------------------")
                 continue
-            if self.input_Given(frame2):
-                input_given.append(1)
-            else:
-                input_given.append(0)
+            box=frame2[self.rectanglex1y1[1]:self.rectanglex2y2[1],
+              self.rectanglex1y1[0]:self.rectanglex2y2[0]]
+            input_given.append(1 if np.any(box[:, :, 0] > 200) else 0)
             if i == 0:
-                frame1 = frame2
+                screen2=frame2[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
+                screen_gray=cv2.cvtColor(screen2,cv2.COLOR_BGR2GRAY)
+                screen_blur=cv2.GaussianBlur(screen_gray,self.guass_kernel,0)
+                screen1=screen_blur
                 continue
-            frame1gray = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-            frame2gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-            frame1guass = cv2.GaussianBlur(frame1gray, self.guass_kernel, 0)
-            frame2guass = cv2.GaussianBlur(frame2gray, self.guass_kernel, 0)
-            screen1 = frame1guass[self.screenx1y1[1]:self.screenx2y2[1],
-                                  self.screenx1y1[0]:self.screenx2y2[0]]
-            screen2 = frame2guass[self.screenx1y1[1]:self.screenx2y2[1],
-                                  self.screenx1y1[0]:self.screenx2y2[0]]
-            distance = np.sum(np.abs(screen1-screen2))
+            screen2=frame2[self.screenx1y1[1]:self.screenx2y2[1],self.screenx1y1[0]:self.screenx2y2[0]]
+            screen_gray=cv2.cvtColor(screen2,cv2.COLOR_BGR2GRAY)
+            screen_blur=cv2.GaussianBlur(screen_gray,self.guass_kernel,0)
+            distance=np.sum(np.abs(screen1-screen_blur))
             y.append(distance)
-            frame1 = frame2
+            screen1=screen_blur
         x = np.arange(len(y))
         y = np.array(y)
         y = y/np.max(y)
@@ -109,23 +117,26 @@ class game_lag:
         x = self.x
         y = savgol_filter(y, 51, 3)
         # ------------------------------------
-        plt.plot(x, y)
-        plt.title("Savgol filter")
-        plt.show()
+        if self.visual:
+            plt.plot(x, y)
+            plt.title("Savgol filter")
+            plt.show()
         # ------------------------------------
         b, a = self.butter_lowpass(self.cutoff, self.fs, self.order)
         y_l = self.butter_lowpass_filter(y, self.cutoff, self.fs, self.order)
         # ------------------------------------
-        plt.plot(x, y_l)
-        plt.title("Butterworth filter")
-        plt.show()
+        if self.visual:
+            plt.plot(x, y_l)
+            plt.title("Butterworth filter")
+            plt.show()
         # ------------------------------------
         analytic_signal = hilbert(y_l)
         amplitude_envelope = np.abs(analytic_signal)
         # ------------------------------------
-        plt.plot(x, amplitude_envelope)
-        plt.title("Amplitude envelope")
-        plt.show()
+        if self.visual:
+            plt.plot(x, amplitude_envelope)
+            plt.title("Amplitude envelope")
+            plt.show()
         # ------------------------------------
         threshold = amplitude_envelope.mean()
         y_t = np.zeros(len(amplitude_envelope))
@@ -133,9 +144,10 @@ class game_lag:
             if amplitude_envelope[i] > threshold:
                 y_t[i] = 1
         # ------------------------------------
-        plt.plot(x, y_t)
-        plt.title("Thresholding")
-        plt.show()
+        if self.visual:
+            plt.plot(x, y_t)
+            plt.title("Thresholding")
+            plt.show()
         # ------------------------------------
         return y_t
 
@@ -150,15 +162,11 @@ class game_lag:
         y = lfilter(b, a, data)
         return y
 
-    def input_Given(self, y):
-        y = y[self.rectanglex1y1[1]:self.rectanglex2y2[1],
-              self.rectanglex1y1[0]:self.rectanglex2y2[0]]
-        y = cv2.cvtColor(y, cv2.COLOR_BGR2RGB)
-        if np.any(y[:, :, 2] > 200):
-            return True
-        return False
-
     def coorelation(self, y1, y2):
+        '''
+        Gets the coorelation in y1 and y2 with the below formula.
+        summation(y1[i]*y2[i]) for i goes from 0 to len of y1.
+        '''
         if len(y1) != len(y2):
             if len(y1) < len(y2):
                 while len(y1) != len(y2):
@@ -170,6 +178,9 @@ class game_lag:
         return np.sum(res)
 
     def shift(self, x: np.array, n: int):
+        '''
+        This shift the given array x to n index.
+        '''
         if n == 0:
             return x
         l = [0]*n
@@ -180,4 +191,4 @@ class game_lag:
 if __name__ == "__main__":
     video_path = "videos\ADS HG.MP4"  # Path to video
     frame_rate = 240  # Frame rate of video
-    game_lag(video_path, frame_rate)  # Create object of game_lag class
+    game_lag(video_path, frame_rate)  # Initialize class with video path and frame rate
