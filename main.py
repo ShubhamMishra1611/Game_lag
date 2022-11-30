@@ -108,7 +108,7 @@ class game_lag:
             screen1=screen_blur
         x = np.arange(len(y))
         y = np.array(y)
-        y = y/np.max(y)
+        y = (y - np.min(y)) / (np.max(y) - np.min(y))
         return y, x, input_given
 
     def process(self):
